@@ -2,16 +2,18 @@
 using System.Data;
 using System.IO.Ports;
 using System.Linq;
+using System.Timers;
+using System.Windows.Forms;
 using IPT_TMS_GoFare.Models;
 using IPT_TMS_GoFare.Repositories;
 using Microsoft.Data.SqlClient;
-using System.Timers;
+using System.Diagnostics;
 
 namespace IPT_TMS_GoFare.Views
 {
     public partial class ScannerForm : Form
     {
-        SerialPort serialPort = new SerialPort("COM5", 9600);
+        SerialPort serialPort = new SerialPort("COM6", 9600);
         SessionRepository sessionRepository = new SessionRepository();
         ClientRepository clientRepository = new ClientRepository();
         WalletRepository walletRepository = new WalletRepository();
@@ -35,7 +37,6 @@ namespace IPT_TMS_GoFare.Views
             {
                 Info.Text = $"Failed to open COM port: {ex.Message}";
             }
-
             StationBox.Text = stations[currentStationIndex];
             stationChangeTimer.Elapsed += ChangeStation;
             stationChangeTimer.Start();
@@ -48,7 +49,10 @@ namespace IPT_TMS_GoFare.Views
 
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-            string data = CleanRFID(serialPort.ReadLine());
+            string rawData = serialPort.ReadLine();
+            Debug.WriteLine("Raw RFID Data: " + rawData);
+            string data = CleanRFID(rawData);
+            Debug.WriteLine("Clean RFID Data: " + data);
             Invoke((MethodInvoker)delegate
             {
                 if (string.IsNullOrWhiteSpace(data))
@@ -93,13 +97,20 @@ namespace IPT_TMS_GoFare.Views
                 int distance = Math.Abs(dropOffIndex - pickUpIndex);
                 decimal fare = baseFare + (distance * 2);
 
+                bool paymentSuccess = false;
                 if (wallet.loaned > 0)
                 {
-                    paymentRepository.PayWithLoan(wallet, fare);
+                    paymentSuccess = paymentRepository.PayWithLoan(wallet, fare);
                 }
                 else
                 {
-                    paymentRepository.PayWithoutLoan(wallet, fare);
+                    paymentSuccess = paymentRepository.PayWithoutLoan(wallet, fare);
+                }
+
+                if (!paymentSuccess)
+                {
+                    Info.Text = $"Payment failed. Insufficient funds.";
+                    return;
                 }
 
                 sessionRepository.RemoveSession(rfid);
@@ -133,9 +144,9 @@ namespace IPT_TMS_GoFare.Views
                 StationBox.Text = stations[currentStationIndex];
             });
         }
+
         private void StationBox_Click(object sender, EventArgs e)
         {
-
         }
     }
 }

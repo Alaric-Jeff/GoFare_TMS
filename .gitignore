@@ -1,55 +1,36 @@
-## Ignore Visual Studio temporary files, build results, and
-## user-generated files
-
 # Build results
 bin/
 obj/
-[Bb]uild/
-[Bb]uild[Ll]og.*
 
-# User-specific files
+# Visual Studio temporary files
+.vs/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
 
-# Mono Auto Generated Files
-mono_crash.*
+# Auto generated files
+Generated_Code/
 
-# Windows image file caches
-Thumbs.db
-ehthumbs.db
-
-# ASP.NET Scaffolding
-ScaffoldingReadMe.txt
-
-# NuGet packages
+# NuGet Packages
 *.nupkg
-# The packages folder can be ignored because of Package Restore
-**/packages/*
-!**/packages/build/
-!**/packages/repositories.config
+packages/
+.nuget/
 
-# Microsoft Visual Studio cache files
-.vs/
-.vscode/
-
-# Backup & Recycle
-*.bak
-*.swp
-*~
-$RECYCLE.BIN/
-
-# Logs
+# Visual Studio Code Analysis
+*.tlog
 *.log
 
-# Others
-*.dbmdl
-*.jfm
-*.pdb
-*.cache
+# Resharper
+_ReSharper*/
+*.DotSettings.user
 
-# Rider IDE (if ever used)
-.idea/
-*.sln.iml
+# Backup & report files
+*.bak
+*.backup
+*.tmp
+*.temp
+
+# Others
+*.pdb
  

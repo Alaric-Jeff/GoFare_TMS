@@ -9,12 +9,12 @@ namespace IPT_TMS_GoFare.Repositories
     {
         private readonly string connectionString = "Data Source=localhost\\sqlexpress;Initial Catalog=GoFare_Database;Integrated Security=True;";
 
-        public void Loan(WalletModel wallet, decimal payment)
+        public bool Loan(WalletModel wallet, decimal payment)
         {
             if (wallet == null || wallet.client_id == 0)
             {
                 Debug.WriteLine("Wallet or Client ID is null");
-                return;
+                return false;
             }
 
             try
@@ -35,19 +35,21 @@ namespace IPT_TMS_GoFare.Repositories
                         command.ExecuteNonQuery();
                     }
                 }
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Exception: {ex}");
+                return false;
             }
         }
 
-        public void PayWithoutLoan(WalletModel wallet, decimal payment)
+        public bool PayWithoutLoan(WalletModel wallet, decimal payment)
         {
             if (wallet == null || wallet.client_id == 0)
             {
                 Debug.WriteLine("Wallet or Client ID is null");
-                return;
+                return false;
             }
 
             try
@@ -55,7 +57,7 @@ namespace IPT_TMS_GoFare.Repositories
                 if (wallet.balance < payment)
                 {
                     Debug.WriteLine("Insufficient balance.");
-                    return;
+                    return false;
                 }
                 wallet.balance -= payment;
 
@@ -70,40 +72,42 @@ namespace IPT_TMS_GoFare.Repositories
                         command.ExecuteNonQuery();
                     }
                 }
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Exception: {ex}");
+                return false;
             }
         }
 
-
-
-
-        public void PayWithLoan(WalletModel wallet, decimal payment)
+        public bool PayWithLoan(WalletModel wallet, decimal payment)
         {
             if (wallet == null || wallet.client_id == 0)
             {
                 Debug.WriteLine("Wallet or Client ID is null");
-                return;
+                return false;
             }
 
             try
             {
+                // First, pay off any existing loan
                 if (wallet.loaned > 0)
                 {
                     decimal payToLoan = Math.Min(wallet.loaned, payment);
                     wallet.loaned -= payToLoan;
-                    payment -= payToLoan; 
-                    if (payment > 0)
+                    payment -= payToLoan;
+                }
+
+                // Deduct remaining payment from balance if necessary
+                if (payment > 0)
+                {
+                    if (wallet.balance < payment)
                     {
-                        if (wallet.balance < payment)
-                        {
-                            Debug.WriteLine("Insufficient balance.");
-                            return;
-                        }
-                        wallet.balance -= payment; 
+                        Debug.WriteLine("Insufficient balance.");
+                        return false;
                     }
+                    wallet.balance -= payment;
                 }
 
                 using (SqlConnection connection = new SqlConnection(connectionString))
@@ -118,15 +122,13 @@ namespace IPT_TMS_GoFare.Repositories
                         command.ExecuteNonQuery();
                     }
                 }
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Exception: {ex}");
+                return false;
             }
         }
-
-
-
-
     }
 }
