@@ -1,0 +1,64 @@
+#include <SPI.h>
+#include <MFRC522.h>
+ 
+// Not Necessary, RFID Indication
+#define LED_PIN1 6
+#define LED_PIN2 7
+
+#define SS_PIN 10
+#define RST_PIN 9
+MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
+//GND GND
+// 3.3V 3.3V 
+//SS 10
+//RST 9
+//MOSI 11
+//MISO 12
+//SCK 13
+
+void setup() 
+  {
+  // LEDPINS (If Applied)
+  pinMode(LED_PIN1, OUTPUT);
+  pinMode(LED_PIN2, OUTPUT);
+
+  Serial.begin(9600);   // Initiate a serial communication
+  SPI.begin();      // Initiate  SPI bus
+  mfrc522.PCD_Init();   // Initiate MFRC522
+	delay(4);
+}
+void loop() 
+{
+  // Look for new cards
+  if ( ! mfrc522.PICC_IsNewCardPresent()) 
+  {
+    Serial.println("No RFID Detected");
+    digitalWrite(LED_PIN1, HIGH);
+    delay(200);
+    digitalWrite(LED_PIN1, LOW);
+    delay(1000);
+    return;
+  }
+  // Select one of the cards
+  if ( ! mfrc522.PICC_ReadCardSerial()) 
+  {
+    return;
+  }
+
+  //Removed serial monitor (conflicting COM ports)
+  String content= "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) 
+  {
+    content += String(mfrc522.uid.uidByte[i], HEX);
+    if (i < mfrc522.uid.size - 1) content += " "; // Add space between bytes
+  }
+
+  content.toUpperCase();
+  if (content.length() > 0) {
+    Serial.println("RFID: " + content);
+    digitalWrite(LED_PIN2, HIGH);
+    delay(200);
+    digitalWrite(LED_PIN2, LOW);
+    delay(1000);
+  }
+} 
