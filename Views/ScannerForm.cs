@@ -1,24 +1,26 @@
 ﻿using System;
 using System.Data;
+using System.Diagnostics;
 using System.IO.Ports;
 using System.Linq;
 using System.Timers;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using IPT_TMS_GoFare.Models;
 using IPT_TMS_GoFare.Repositories;
 using Microsoft.Data.SqlClient;
-using System.Diagnostics;
 
 namespace IPT_TMS_GoFare.Views
 {
     public partial class ScannerForm : Form
     {
-        SerialPort serialPort = new SerialPort("COM6", 9600);
+        SerialPort serialPort = new SerialPort("COM5", 9600);
         SessionRepository sessionRepository = new SessionRepository();
         ClientRepository clientRepository = new ClientRepository();
         WalletRepository walletRepository = new WalletRepository();
         RFIDRepository rfidRepository = new RFIDRepository();
         PaymentRepository paymentRepository = new PaymentRepository();
+        WebsocketRepository ws = new WebsocketRepository(); // Our WebSocket integration.
         string[] stations = { "Station 1", "Station 2", "Station 3", "Station 4", "Station 5", "Station 6", "Station 7", "Station 8", "Station 9", "Station 10" };
         decimal baseFare = 20;
         int currentStationIndex = 0;
@@ -29,6 +31,7 @@ namespace IPT_TMS_GoFare.Views
         {
             InitializeComponent();
             serialPort.DataReceived += SerialPort_DataReceived;
+
             try
             {
                 serialPort.Open();
@@ -37,9 +40,30 @@ namespace IPT_TMS_GoFare.Views
             {
                 Info.Text = $"Failed to open COM port: {ex.Message}";
             }
+
             StationBox.Text = stations[currentStationIndex];
             stationChangeTimer.Elapsed += ChangeStation;
             stationChangeTimer.Start();
+
+            // Subscribe to WebSocket events to update UI.
+            ws.OnStatusUpdated += (status) =>
+            {
+                Invoke((MethodInvoker)(() =>
+                {
+                    Info.Text += "\n" + status;
+                }));
+            };
+
+            ws.OnMessageReceived += (message) =>
+            {
+                Invoke((MethodInvoker)(() =>
+                {
+                    Info.Text += "\n" + message;
+                }));
+            };
+
+            // Start the WebSocket connection asynchronously.
+            Task.Run(() => ws.ConnectToWebSocketAsync());
         }
 
         private string CleanRFID(string input)
@@ -53,6 +77,7 @@ namespace IPT_TMS_GoFare.Views
             Debug.WriteLine("Raw RFID Data: " + rawData);
             string data = CleanRFID(rawData);
             Debug.WriteLine("Clean RFID Data: " + data);
+
             Invoke((MethodInvoker)delegate
             {
                 if (string.IsNullOrWhiteSpace(data))
@@ -77,8 +102,17 @@ namespace IPT_TMS_GoFare.Views
 
             if (!sessionExists)
             {
+                if (wallet.balance <= 0 && wallet.loaned > 0)
+                {
+                    MessageBox.Show("You have no balance and your loan is already maxed out. Please recharge your wallet.");
+                    return;
+                }
+
                 sessionRepository.AddSession(rfid, currentStation);
                 Info.Text = $"Session started\nPick Up: {currentStation}\nRFID: {record.rfid}\nBalance: {wallet.balance}";
+
+                // Optionally, notify backend via WebSocket.
+                Task.Run(() => ws.SendMessageAsync($"Session started for RFID: {rfid} at {currentStation}"));
             }
             else
             {
@@ -97,24 +131,21 @@ namespace IPT_TMS_GoFare.Views
                 int distance = Math.Abs(dropOffIndex - pickUpIndex);
                 decimal fare = baseFare + (distance * 2);
 
-                bool paymentSuccess = false;
-                if (wallet.loaned > 0)
-                {
-                    paymentSuccess = paymentRepository.PayWithLoan(wallet, fare);
-                }
-                else
-                {
-                    paymentSuccess = paymentRepository.PayWithoutLoan(wallet, fare);
-                }
+                bool successful = paymentRepository.Pay(wallet, fare);
 
-                if (!paymentSuccess)
+                if (!successful)
                 {
                     Info.Text = $"Payment failed. Insufficient funds.";
                     return;
                 }
+                else
+                {
+                    sessionRepository.RemoveSession(rfid);
+                    Info.Text = $"Session ended\nPick Up: {pickUp}\nDrop Off: {currentStation}\nRFID: {record.rfid}\nFare: {fare}\nNew Balance: {wallet.balance}\nLoan: {wallet.loaned}";
 
-                sessionRepository.RemoveSession(rfid);
-                Info.Text = $"Session ended\nPick Up: {pickUp}\nDrop Off: {currentStation}\nRFID: {record.rfid}\nFare: {fare}\nNew Balance: {wallet.balance}\nLoan: {wallet.loaned}";
+                    // Optionally, notify backend via WebSocket.
+                    Task.Run(() => ws.SendMessageAsync($"Session ended for RFID: {rfid}. Fare: {fare}"));
+                }
             }
         }
 
